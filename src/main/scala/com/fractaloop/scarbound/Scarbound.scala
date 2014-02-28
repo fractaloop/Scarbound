@@ -2,8 +2,12 @@ package com.fractaloop.scarbound
 
 import java.io.File
 import com.fractaloop.scarbound.server.ScarboundServer
+import org.slf4j.LoggerFactory
+import org.jboss.netty.logging.InternalLoggerFactory
 
 object Scarbound {
+  val log = LoggerFactory.getLogger(this.getClass)
+
   def main(args: Array[String]) {
     val Version = getClass.getPackage.getImplementationVersion
 
@@ -25,11 +29,11 @@ object Scarbound {
     }
 
     parser.parse(args, ScarboundConfig()) map { config ⇒
+      log.info("Starting {}", config.command)
       config.command match {
         case "server" ⇒
           ScarboundServer.run(config.configFile)
       }
     }
-
   }
 }

@@ -14,9 +14,10 @@ scalacOptions in (Compile, doc) ++= Seq("-diagrams","-implicits")
 
 libraryDependencies ++= Seq(
   "org.slf4j" % "slf4j-api" % "1.7.6",
-  "ch.qos.logback" % "logback-classic" % "1.1.1" % "runtime",
+  "ch.qos.logback" % "logback-classic" % "1.1.1",
   "com.github.scopt" %% "scopt" % "3.2.0",
   "com.typesafe" % "config" % "1.2.0",
-  "io.netty" % "netty" % "3.9.0.Final"
+  "io.netty" % "netty" % "3.9.0.Final",
+  "org.scala-tools.sbinary" %% "sbinary" % "0.4.3-SNAPSHOT"
 )
 

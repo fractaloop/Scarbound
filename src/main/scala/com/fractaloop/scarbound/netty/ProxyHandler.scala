@@ -1,12 +1,16 @@
 package com.fractaloop.scarbound.netty
 
+import java.net.InetSocketAddress
+
+import org.jboss.netty.bootstrap.ClientBootstrap
+import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
 import org.jboss.netty.channel._
 import org.jboss.netty.channel.socket.ClientSocketChannelFactory
-import org.jboss.netty.bootstrap.ClientBootstrap
-import java.net.InetSocketAddress
-import org.jboss.netty.buffer.{ChannelBuffers, ChannelBuffer}
+import org.slf4j.LoggerFactory
 
-class ScarboundInboundHandler(cf: ClientSocketChannelFactory, remoteHost: String, remotePort: Int) extends SimpleChannelUpstreamHandler {
+class ProxyHandler(cf: ClientSocketChannelFactory, remoteHost: String, remotePort: Int) extends SimpleChannelUpstreamHandler {
+  val log = LoggerFactory.getLogger(classOf[ProxyHandler])
+
   // This lock guards against the race condition that overrides the
   // OP_READ flag incorrectly.
   // See the related discussion: http://markmail.org/message/x7jc6mqx6ripynqf
@@ -17,7 +21,6 @@ class ScarboundInboundHandler(cf: ClientSocketChannelFactory, remoteHost: String
   private var outboundChannel: Channel = null
 
   override def channelOpen(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
-    println("Opened channel from {}", ctx.getChannel.getRemoteAddress)
     // Suspend incoming traffic until connected to the remote host.
     val inboundChannel = e.getChannel
     inboundChannel.setReadable(false)
@@ -44,7 +47,7 @@ class ScarboundInboundHandler(cf: ClientSocketChannelFactory, remoteHost: String
 
   override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) {
     val msg = e.getMessage.asInstanceOf[ChannelBuffer]
-//    System.out.println(">>> " + ChannelBuffers.hexDump(msg));
+    log.trace("Proxy forwarding to remote: {}", ChannelBuffers.hexDump(msg));
     trafficLock.synchronized {
       outboundChannel.write(msg)
       // If outboundChannel is saturated, do not read until notified in
@@ -66,6 +69,7 @@ class ScarboundInboundHandler(cf: ClientSocketChannelFactory, remoteHost: String
   }
 
   override def channelClosed(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
+    log.trace("channelClosed")
     if (outboundChannel != null) {
       closeOnFlush(outboundChannel)
     }
@@ -78,22 +82,23 @@ class ScarboundInboundHandler(cf: ClientSocketChannelFactory, remoteHost: String
 
   private class OutboundHandler(inboundChannel: Channel) extends SimpleChannelUpstreamHandler {
 
+    val log = LoggerFactory.getLogger(classOf[OutboundHandler])
+
     override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) {
       val msg = e.getMessage.asInstanceOf[ChannelBuffer]
       // TODO Pass this off to a
-//      System.out.println("<<< " + ChannelBuffers.hexDump(msg))
+      log.trace("Proxy received bytes from remote: {}", ChannelBuffers.hexDump(msg))
       trafficLock.synchronized {
         inboundChannel.write(msg)
         // If inboundChannel is saturated, do not read until notified in
-        // ScarboundInboundHandler.channelInterestChanged().
+        // ProxyHandler.channelInterestChanged().
         if (!inboundChannel.isWritable) {
           e.getChannel.setReadable(false)
         }
       }
     }
 
-    override def channelInterestChanged(ctx: ChannelHandlerContext,
-                                        e: ChannelStateEvent) {
+    override def channelInterestChanged(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
       // If outboundChannel is not saturated anymore, continue accepting
       // the incoming traffic from the inboundChannel.
       trafficLock.synchronized {
